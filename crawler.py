@@ -104,17 +104,35 @@ def fetch_trips(url: str) -> None:
             print("-" * 40)
             trip_counter += 1
         # Check for load more button
+        load_more_available = False
         try:
             load_more_btn = driver.find_element('xpath', "//button[@data-testid='loadMoreResults']")
             if load_more_btn.is_displayed() and load_more_btn.is_enabled():
-                user_input = input("Load more results? (y/n): ").strip().lower()
-                if user_input == 'y':
-                    load_more_btn.click()
-                    time.sleep(5)
-                    continue
+                load_more_available = True
         except Exception:
             pass
-        break
+        # Prompt user for next action
+        if load_more_available:
+            user_input = input("Load more results? (y/n), or enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins: ").strip().lower()
+            if user_input == 'y':
+                load_more_btn.click()
+                time.sleep(5)
+                continue
+        else:
+            user_input = input("Enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins, or press Enter to exit: ").strip().lower()
+        if user_input.isdigit():
+            inspect_trip_for_accessible_cabins(int(user_input), trips)
+            break
+        elif '-' in user_input:
+            parts = user_input.split('-')
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                start = int(parts[0])
+                end = int(parts[1])
+                for idx in range(start, end + 1):
+                    inspect_trip_for_accessible_cabins(idx, trips)
+                break
+        else:
+            break
 
 
 def main() -> None:
@@ -127,6 +145,18 @@ def main() -> None:
         fetch_trips(url)
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting...")
+
+
+# Placeholder for accessible cabin inspection
+
+def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
+    if 1 <= trip_number <= len(trips):
+        trip = trips[trip_number - 1]
+        print(f"\n[Inspecting Trip {trip_number} for accessible cabins]")
+        print(f"  Title: {trip.title}")
+        print(f"  (Accessible cabin check not yet implemented)")
+    else:
+        print(f"Trip number {trip_number} is out of range.")
 
 
 # --- Entrypoint ---
