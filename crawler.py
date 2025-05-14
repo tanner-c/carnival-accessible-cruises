@@ -33,11 +33,14 @@ def close_driver():
 atexit.register(close_driver)
 
 def main():
-    url = input("Enter the Carnival search URL for trips: ").strip()
-    if not url:
-        print("No URL provided. Exiting.")
-        return
-    fetch_trips(url)
+    try:
+        url = input("Enter the Carnival search URL for trips: ").strip()
+        if not url:
+            print("No URL provided. Exiting.")
+            return
+        fetch_trips(url)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user. Exiting...")
 
 
 def fetch_trips(url):
@@ -55,32 +58,50 @@ def fetch_trips(url):
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     driver.get(url)
     time.sleep(5)  # Wait for JS to load (adjust as needed)
-    html = driver.page_source
 
-    # Parse the HTML with BeautifulSoup
-    soup = BeautifulSoup(html, 'html.parser')
-
-    # Find all trip tiles using data-testid attribute
-    trip_tiles = soup.find_all('div', {'data-testid': 'tripTile'})
-    if not trip_tiles:
-        print("No trips found.")
-        return
-
-    trips = parse_trips(trip_tiles)
-
-    # Once we have all the trips, print them
-    # Print the trips
-    for i, trip in enumerate(trips, 1):
-        print(f"Trip {i}:")
-
-        if trip.title:
-           print(f"  Title: {trip.title}")
-        if trip.region:
-           print(f"  Region: {trip.region}")
-        if trip.ship:
-           print(f"  Ship: {trip.ship}")
-        if trip.price:
-           print(f"  Price: {trip.price}")
+    seen_trips = set()
+    trip_counter = 1
+    while True:
+        html = driver.page_source
+        soup = BeautifulSoup(html, 'html.parser')
+        trip_tiles = soup.find_all('div', {'data-testid': 'tripTile'})
+        if not trip_tiles:
+            print("No trips found.")
+            return
+        trips = parse_trips(trip_tiles)
+        new_trips = []
+        for trip in trips:
+            # Use a tuple of (title, region, ship, price) as a unique identifier
+            trip_id = (trip.title, trip.region, trip.ship, trip.price)
+            if trip_id not in seen_trips:
+                seen_trips.add(trip_id)
+                new_trips.append(trip)
+        if not new_trips:
+            print("No new trips found.")
+        for trip in new_trips:
+            print(f"Trip {trip_counter}:")
+            if trip.title:
+                print(f"  Title: {trip.title}")
+            if trip.region:
+                print(f"  Region: {trip.region}")
+            if trip.ship:
+                print(f"  Ship: {trip.ship}")
+            if trip.price:
+                print(f"  Price: {trip.price}")
+            print("-" * 40)
+            trip_counter += 1
+        # Check for load more button
+        try:
+            load_more_btn = driver.find_element('xpath', "//button[@data-testid='loadMoreResults']")
+            if load_more_btn.is_displayed() and load_more_btn.is_enabled():
+                user_input = input("Load more results? (y/n): ").strip().lower()
+                if user_input == 'y':
+                    load_more_btn.click()
+                    time.sleep(5)  # Wait for new results to load
+                    continue
+        except Exception:
+            pass
+        break
 
 
 def parse_trips(trip_tiles):
