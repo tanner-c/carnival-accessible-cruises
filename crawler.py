@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 import time
+import atexit
 
 
 class Trip:
@@ -18,15 +19,29 @@ class Trip:
         return f"Trip(title={self.title!r}, region={self.region!r}, ship={self.ship!r}, price={self.price!r})"
 
 
+driver = None  # Global driver variable
+
+def close_driver():
+    global driver
+    if driver is not None:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        driver = None
+
+atexit.register(close_driver)
+
 def main():
     url = input("Enter the Carnival search URL for trips: ").strip()
     if not url:
         print("No URL provided. Exiting.")
         return
-    fetch_accessible_cabins(url)
+    fetch_trips(url)
 
 
-def fetch_accessible_cabins(url):
+def fetch_trips(url):
+    global driver
     # Check if the URL is valid
     if not url.startswith("https://www.carnival.com/"):
         print("Invalid URL. Please provide a valid Carnival search URL.")
@@ -41,7 +56,6 @@ def fetch_accessible_cabins(url):
     driver.get(url)
     time.sleep(5)  # Wait for JS to load (adjust as needed)
     html = driver.page_source
-    driver.quit()
 
     # Parse the HTML with BeautifulSoup
     soup = BeautifulSoup(html, 'html.parser')
@@ -52,24 +66,24 @@ def fetch_accessible_cabins(url):
         print("No trips found.")
         return
 
-    trips = parse_trip_tiles(trip_tiles)
+    trips = parse_trips(trip_tiles)
 
+    # Once we have all the trips, print them
     # Print the trips
     for i, trip in enumerate(trips, 1):
         print(f"Trip {i}:")
 
         if trip.title:
-            print(f"  Title: {trip.title}")
+           print(f"  Title: {trip.title}")
         if trip.region:
-            print(f"  Region: {trip.region}")
+           print(f"  Region: {trip.region}")
         if trip.ship:
-            print(f"  Ship: {trip.ship}")
+           print(f"  Ship: {trip.ship}")
         if trip.price:
-            print(f"  Price: {trip.price}")
-        print()
+           print(f"  Price: {trip.price}")
 
 
-def parse_trip_tiles(trip_tiles):
+def parse_trips(trip_tiles):
    trips = []
    for i, tile in enumerate(trip_tiles, 1):
         # Extract title, region, ship, and price if available
@@ -90,6 +104,8 @@ def parse_trip_tiles(trip_tiles):
             price=price.get_text(strip=True) if price else None
         )
         trips.append(trip)
+
+
    return trips
 
 
