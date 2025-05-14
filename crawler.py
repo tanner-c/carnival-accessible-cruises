@@ -5,6 +5,10 @@ from typing import List, Set, Tuple
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.common.exceptions import StaleElementReferenceException, WebDriverException, TimeoutException
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
@@ -116,7 +120,7 @@ def fetch_trips(url: str) -> None:
             user_input = input("Load more results? (y/n), or enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins: ").strip().lower()
             if user_input == 'y':
                 load_more_btn.click()
-                time.sleep(5)
+                time.sleep(1)
                 continue
         else:
             user_input = input("Enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins, or press Enter to exit: ").strip().lower()
@@ -145,6 +149,23 @@ def main() -> None:
         fetch_trips(url)
     except KeyboardInterrupt:
         print("\nInterrupted by user. Exiting...")
+
+
+def is_trip_accessible() -> bool:
+    """
+    Attempt to click the 'Continue to Specials' button on the cabins panel.
+    Returns True if the button was found and clicked, False otherwise.
+    """
+    global driver
+    try:
+        # Wait for the Continue button to be clickable
+        continue_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='cabinsPanel2021Continue']"))
+        )
+        continue_btn.click()
+        return True
+    except (TimeoutException, WebDriverException):
+        return False
 
 
 # Placeholder for accessible cabin inspection
@@ -184,23 +205,80 @@ def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
                     if booking_buttons:
                         print(f"  Found {len(booking_buttons)} booking options")
 
-                        # Go through each booking button
-                        for i, button in enumerate(booking_buttons):
-                            date_info = ""
-                            try:
-                                # Try to get the date info
-                                date_element = driver.find_elements('xpath', "//div[contains(@class, 'dates-cell-style__Days')]")[i]
-                                date_info = date_element.text if date_element else "unknown date"
-                            except Exception:
-                                pass
-
-                            print(f"\n  Checking sailing {i+1}/{len(booking_buttons)} ({date_info})...")
-                            # Click the 'START BOOKING' button
-                            button.click()
-                            time.sleep(2)  # Wait for the page to respond
-
-                            # Print 'Not implemented' as a placeholder
-                            print("  Not implemented")
+                        # Extract booking URLs and iterate through each sailing date
+                        buttons = driver.find_elements(By.XPATH, "//a[@data-testid='selectSailingDateButton']")
+                        booking_urls = [btn.get_attribute('href') for btn in buttons]
+                        for idx, url in enumerate(booking_urls):
+                            # Re-fetch date elements to avoid stale references
+                            dates = driver.find_elements(By.XPATH, "//div[contains(@class, 'dates-cell-style__Days')]")
+                            date_info = dates[idx].text if idx < len(dates) else 'unknown date'
+                            print(f"\n  Checking sailing {idx+1}/{len(booking_urls)} ({date_info})...")
+                            # Navigate to booking URL and attempt to pull accessible cabin options
+                            driver.get(url)
+                            time.sleep(2)
+                            cabin_available = False
+                            if is_trip_accessible():
+                                try:
+                                    # Click 'Accessible Room Needed' checkbox
+                                    checkbox = WebDriverWait(driver, 10).until(
+                                        EC.element_to_be_clickable((By.CSS_SELECTOR, "input[data-testid='accessibilityToggleButton.0Collapse']"))
+                                    )
+                                    if checkbox.get_attribute('aria-checked') != 'true':
+                                        checkbox.click()
+                                    # Select 'Fully Accessible Cabin' option
+                                    full_option = WebDriverWait(driver, 10).until(
+                                        EC.element_to_be_clickable((By.XPATH, "//label[contains(text(), 'Fully Accessible Cabin')]"))
+                                    )
+                                    full_option.click()
+                                    # Click 'Continue to Room type'
+                                    qualifiers_continue = WebDriverWait(driver, 10).until(
+                                        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='qualifiersPanelNextLink']"))
+                                    )
+                                    qualifiers_continue.click()
+                                    # Click the accessibility acknowledgement confirm button
+                                    confirm_btn = WebDriverWait(driver, 10).until(
+                                        EC.element_to_be_clickable((By.CSS_SELECTOR, "button[data-testid='accessibilityConfirmationContinueButton']"))
+                                    )
+                                    confirm_btn.click()
+                                    # Wait for possible error message or next page load
+                                    time.sleep(2)
+                                    # Check for booking error container
+                                    error_elem = driver.find_elements(By.CSS_SELECTOR, "div[data-testid='bookingErrorContainer']")
+                                    if error_elem:
+                                        cabin_available = False
+                                    else:
+                                        cabin_available = True
+                                except Exception as e:
+                                    print(f"  Error selecting accessible options: {e}")
+                            print(f"  Accessible cabin available? {cabin_available}")
+                            if cabin_available:
+                                try:
+                                    # Wait for the room types slider to appear
+                                    slider = WebDriverWait(driver, 5).until(
+                                        lambda d: d.find_element(By.CSS_SELECTOR, "div[data-testid='meta2022SliderContainer']")
+                                    )
+                                    # Extract each accessible room option
+                                    options = slider.find_elements(By.CSS_SELECTOR, "div[data-testid='metaButton2022'] button")
+                                    print("    Accessible room types and prices:")
+                                    for opt in options:
+                                        name = opt.find_element(By.CSS_SELECTOR, "div[data-testid='metaLabel']").text
+                                        price = opt.find_element(By.CSS_SELECTOR, "div[data-testid='fromPriceLabel']").text
+                                        print(f"      {name}: {price}")
+                                    # Print the current booking page URL
+                                    print(f"    Page URL: {driver.current_url}")
+                                except Exception:
+                                    print("    No room slider found or failed to extract prices")
+                            # Navigate back to trip list: go back twice to exit booking flow
+                            driver.back()
+                            time.sleep(1)
+                            driver.back()
+                            time.sleep(1)
+                            show_button = WebDriverWait(driver, 10).until(
+                                EC.element_to_be_clickable((By.XPATH, f"(//button[contains(@data-testid,'showDates_')])[{trip_number}]") )
+                            )
+                            if show_button.get_attribute('aria-expanded') != 'true':
+                                show_button.click()
+                                WebDriverWait(driver, 10).until(lambda d: show_button.get_attribute('aria-expanded') == 'true')
                     else:
                         print("  No booking buttons found")
                 else:
