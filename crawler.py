@@ -67,7 +67,7 @@ def fetch_trips(url: str) -> None:
         return
     # Set up Selenium with headless Chrome
     options = Options()
-    options.add_argument('--headless')
+    # options.add_argument('--headless')
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
@@ -150,11 +150,65 @@ def main() -> None:
 # Placeholder for accessible cabin inspection
 
 def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
+    """Inspect a trip for accessible cabin availability."""
+    global driver
     if 1 <= trip_number <= len(trips):
         trip = trips[trip_number - 1]
         print(f"\n[Inspecting Trip {trip_number} for accessible cabins]")
         print(f"  Title: {trip.title}")
-        print(f"  (Accessible cabin check not yet implemented)")
+
+        # Find the trip tile for this trip
+        try:
+            # First, try to find the show dates button for this trip
+            show_dates_buttons = driver.find_elements('xpath', "//button[contains(@data-testid, 'showDates_')]")
+            if trip_number <= len(show_dates_buttons):
+                show_button = show_dates_buttons[trip_number - 1]
+                print("  Clicking 'Show Dates' button to check available sailing dates...")
+
+                # Check if dates are already expanded
+                is_expanded = show_button.get_attribute('aria-expanded')
+                if is_expanded != 'true':
+                    show_button.click()
+                    time.sleep(2)  # Wait for dates to expand
+
+                # Now look for accessible cabin options
+                print("  Checking for accessible cabin availability...")
+
+                # Check for the available dates section
+                dates_section = driver.find_elements('xpath', "//div[contains(@class, 'dates-cell-style__Date')]")
+                if dates_section:
+                    print(f"  Found {len(dates_section)} available sailing dates")
+
+                    # Find all "START BOOKING" buttons for different sailing dates
+                    booking_buttons = driver.find_elements('xpath', "//a[@data-testid='selectSailingDateButton']")
+                    if booking_buttons:
+                        print(f"  Found {len(booking_buttons)} booking options")
+
+                        # Go through each booking button
+                        for i, button in enumerate(booking_buttons):
+                            date_info = ""
+                            try:
+                                # Try to get the date info
+                                date_element = driver.find_elements('xpath', "//div[contains(@class, 'dates-cell-style__Days')]")[i]
+                                date_info = date_element.text if date_element else "unknown date"
+                            except Exception:
+                                pass
+
+                            print(f"\n  Checking sailing {i+1}/{len(booking_buttons)} ({date_info})...")
+                            # Click the 'START BOOKING' button
+                            button.click()
+                            time.sleep(2)  # Wait for the page to respond
+
+                            # Print 'Not implemented' as a placeholder
+                            print("  Not implemented")
+                    else:
+                        print("  No booking buttons found")
+                else:
+                    print("  No sailing dates found or dates section not available")
+            else:
+                print("  Could not find 'Show Dates' button for this trip")
+        except Exception as e:
+            print(f"  Error inspecting trip: {e}")
     else:
         print(f"Trip number {trip_number} is out of range.")
 
