@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Run Carnival Accessible Cabin Crawler",
+			"command": "python",
+			"args": [
+				"crawler.py"
+			],
+			"group": "build",
+			"problemMatcher": []
+		}
+	]
+}
