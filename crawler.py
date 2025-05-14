@@ -69,12 +69,27 @@ def fetch_trips(url: str) -> None:
     if not url.startswith("https://www.carnival.com/"):
         print("Invalid URL. Please provide a valid Carnival search URL.")
         return
-    # Set up Selenium with headless Chrome
+    # Set up Selenium with Chrome in visible mode and stealth options
     options = Options()
+    # options.add_argument('--headless')
+    # disable headless to appear as real user
     # options.add_argument('--headless')
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
+    # Hide automation flags
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
+    options.add_argument("--disable-blink-features=AutomationControlled")
+    # Use a common browser user agent
+    options.add_argument("user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                         "AppleWebKit/537.36 (KHTML, like Gecko) "
+                         "Chrome/114.0.0.0 Safari/537.36")
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    # Stealth: override the webdriver property
+    driver.execute_cdp_cmd(
+        "Page.addScriptToEvaluateOnNewDocument",
+        {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"}
+    )
     driver.get(url)
     time.sleep(5)  # Wait for JS to load
     seen_trips: Set[Tuple[str, str, str, str]] = set()
