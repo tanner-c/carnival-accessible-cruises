@@ -77,44 +77,62 @@ def fetch_trips(url: str) -> None:
     if not url.startswith("https://www.carnival.com/"):
         print("Invalid URL. Please provide a valid Carnival search URL.")
         return
-    # Set up Selenium with Chrome in visible mode and stealth options
+    
+    # Initialize the Selenium driver with options
     options = Options()
-    # options.add_argument('--headless')
-    # disable headless to appear as real user
-    # options.add_argument('--headless')
+
+    # Set Chrome options for headless mode and stealth
+    options.add_argument("--headless")  # Run in headless mode
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
-    # Hide automation flags
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
     options.add_argument("--disable-blink-features=AutomationControlled")
-    # Use a common browser user agent
     options.add_argument(
         "user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/114.0.0.0 Safari/537.36"
     )
+
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()), options=options
     )
-    # Stealth: override the webdriver property
     driver.execute_cdp_cmd(
         "Page.addScriptToEvaluateOnNewDocument",
         {
             "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         },
     )
+
+    
+    driver.implicitly_wait(10)  # Set implicit wait for elements to load
     driver.get(url)
-    time.sleep(5)  # Wait for JS to load
+
+    # Wait for the page to load and display trip tiles
+    print(f"Fetching trips from: {url}")
+    time.sleep(5)
+
+    # Initialize a set to track seen trips and a counter for trip numbers
     seen_trips: Set[Tuple[str, str, str, str]] = set()
     trip_counter = 1
+
+    # Main loop to fetch and display trips
     while True:
         html = driver.page_source
         soup = BeautifulSoup(html, "html.parser")
+
+        if not soup:
+            print("Failed to load page or no content found.")
+            break
+
+        # Find all trip tiles on the page
+        print("Parsing trip tiles...")
         trip_tiles = soup.find_all("div", {"data-testid": "tripTile"})
+
         if not trip_tiles:
             print("No trips found.")
             return
+        
         trips = parse_trips(trip_tiles)
         new_trips = []
         for trip in trips:
@@ -211,9 +229,6 @@ def is_trip_accessible() -> bool:
         return True
     except (TimeoutException, WebDriverException):
         return False
-
-
-# Placeholder for accessible cabin inspection
 
 
 def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
