@@ -60,46 +60,6 @@ def close_driver():
 atexit.register(close_driver)
 
 
-def parse_trips(trip_tiles) -> List[Trip]:
-    """Parse trip tiles into a list of Trip objects."""
-
-    trips = []
-
-
-    for tile in trip_tiles:
-        try:
-            # Extract title, region, ship, and price from the tile
-            # Use data-testid attributes to find elements
-        
-            title_h2 = tile.find("h2", {"data-testid": "itinerary-title"})
-
-            title = " ".join(title_h2.stripped_strings) if title_h2 else None
-
-            region = tile.find(
-                "span", {"data-testid": lambda v: v and v.startswith("cg-region_")}
-            )
-
-            ship = tile.find(
-                "div", {"data-testid": lambda v: v and v.startswith("cg-ship_")}
-            )
-
-            price = tile.find("div", {"data-testid": "priceAmount"})
-
-            trip = Trip(
-                title=title,
-                region=region.get_text(strip=True) if region else None,
-                ship=ship.get_text(strip=True) if ship else None,
-                price=price.get_text(strip=True) if price else None,
-            )
-
-            trips.append(trip)
-        except Exception as e:
-            # Skip this tile if we encounter any parsing errors
-            print(f"Error parsing trip tile: {e}")
-
-    return trips
-
-
 def fetch_trips(url: str) -> None:
     """Fetch and display trips from the Carnival search page, supporting 'load more'."""
     global driver
@@ -108,13 +68,12 @@ def fetch_trips(url: str) -> None:
         return
     
     # Initialize the Selenium driver with options
-    options = Options()
-
-    # Set Chrome options for headless mode and stealth
-    options.add_argument("--headless")  # Run in headless mode
+    options = Options()    # Set Chrome options for headless mode and stealth
+    # options.add_argument("--headless")  # Run in headless mode
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_argument("--log-level=3")  # Suppress console messages
+    options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
     options.add_experimental_option("useAutomationExtension", False)
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument(
@@ -248,10 +207,50 @@ def fetch_trips(url: str) -> None:
         else:
             break
 
+def parse_trips(trip_tiles) -> List[Trip]:
+    """Parse trip tiles into a list of Trip objects."""
+
+    trips = []
+
+
+    for tile in trip_tiles:
+        try:
+            # Extract title, region, ship, and price from the tile
+            # Use data-testid attributes to find elements
+        
+            title_h2 = tile.find("h2", {"data-testid": "itinerary-title"})
+
+            title = " ".join(title_h2.stripped_strings) if title_h2 else None
+
+            region = tile.find(
+                "span", {"data-testid": lambda v: v and v.startswith("cg-region_")}
+            )
+
+            ship = tile.find(
+                "div", {"data-testid": lambda v: v and v.startswith("cg-ship_")}
+            )
+
+            price = tile.find("div", {"data-testid": "priceAmount"})
+
+            trip = Trip(
+                title=title,
+                region=region.get_text(strip=True) if region else None,
+                ship=ship.get_text(strip=True) if ship else None,
+                price=price.get_text(strip=True) if price else None,
+            )
+
+            trips.append(trip)
+        except Exception as e:
+            # Skip this tile if we encounter any parsing errors
+            print(f"Error parsing trip tile: {e}")
+
+    return trips
+
 
 def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
     """Inspect a trip for accessible cabin availability."""
     global driver
+    
     if 1 <= trip_number <= len(trips):
         trip = trips[trip_number - 1]
         print(f"\n[Inspecting Trip {trip_number} for accessible cabins]")
