@@ -33,6 +33,18 @@ class Trip:
 
 driver = None  # Global Selenium driver
 
+def main() -> None:
+    """Entrypoint for the script."""
+    try:
+        url = input("Enter the Carnival search URL for trips: ").strip()
+        if not url:
+            print("No URL provided. Exiting.")
+            return
+        fetch_trips(url)
+    except KeyboardInterrupt:
+        close_driver()
+        print("\nInterrupted by user. Exiting...")
+
 
 def close_driver():
     """Ensure the Selenium driver is closed on exit."""
@@ -50,24 +62,41 @@ atexit.register(close_driver)
 
 def parse_trips(trip_tiles) -> List[Trip]:
     """Parse trip tiles into a list of Trip objects."""
+
     trips = []
+
+
     for tile in trip_tiles:
-        title_h2 = tile.find("h2", {"data-testid": "itinerary-title"})
-        title = " ".join(title_h2.stripped_strings) if title_h2 else None
-        region = tile.find(
-            "span", {"data-testid": lambda v: v and v.startswith("cg-region_")}
-        )
-        ship = tile.find(
-            "div", {"data-testid": lambda v: v and v.startswith("cg-ship_")}
-        )
-        price = tile.find("div", {"data-testid": "priceAmount"})
-        trip = Trip(
-            title=title,
-            region=region.get_text(strip=True) if region else None,
-            ship=ship.get_text(strip=True) if ship else None,
-            price=price.get_text(strip=True) if price else None,
-        )
-        trips.append(trip)
+        try:
+            # Extract title, region, ship, and price from the tile
+            # Use data-testid attributes to find elements
+        
+            title_h2 = tile.find("h2", {"data-testid": "itinerary-title"})
+
+            title = " ".join(title_h2.stripped_strings) if title_h2 else None
+
+            region = tile.find(
+                "span", {"data-testid": lambda v: v and v.startswith("cg-region_")}
+            )
+
+            ship = tile.find(
+                "div", {"data-testid": lambda v: v and v.startswith("cg-ship_")}
+            )
+
+            price = tile.find("div", {"data-testid": "priceAmount"})
+
+            trip = Trip(
+                title=title,
+                region=region.get_text(strip=True) if region else None,
+                ship=ship.get_text(strip=True) if ship else None,
+                price=price.get_text(strip=True) if price else None,
+            )
+
+            trips.append(trip)
+        except Exception as e:
+            # Skip this tile if we encounter any parsing errors
+            print(f"Error parsing trip tile: {e}")
+
     return trips
 
 
@@ -103,7 +132,6 @@ def fetch_trips(url: str) -> None:
             "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         },
     )
-
     
     driver.implicitly_wait(10)  # Set implicit wait for elements to load
     driver.get(url)
@@ -133,15 +161,23 @@ def fetch_trips(url: str) -> None:
             print("No trips found.")
             return
         
+
         trips = parse_trips(trip_tiles)
+
         new_trips = []
+
+        # Filter out already seen trips
         for trip in trips:
+            # Create a unique identifier for the trip based on its attributes
             trip_id = (trip.title, trip.region, trip.ship, trip.price)
+
             if trip_id not in seen_trips:
                 seen_trips.add(trip_id)
                 new_trips.append(trip)
+    
         if not new_trips:
             print("No new trips found.")
+
         for trip in new_trips:
             print(f"Trip {trip_counter}:")
             if trip.title:
@@ -154,8 +190,10 @@ def fetch_trips(url: str) -> None:
                 print(f"  Price: {trip.price}")
             print("-" * 40)
             trip_counter += 1
+        
         # Check for load more button
         load_more_available = False
+
         try:
             load_more_btn = driver.find_element(
                 "xpath", "//button[@data-testid='loadMoreResults']"
@@ -164,8 +202,10 @@ def fetch_trips(url: str) -> None:
                 load_more_available = True
         except Exception:
             pass
+
         # Prompt user for next action
         if load_more_available:
+            # We offer the user the option to load more results or inspect a trip or range of trips
             user_input = (
                 input(
                     "Load more results? (y/n), or enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins: "
@@ -173,11 +213,15 @@ def fetch_trips(url: str) -> None:
                 .strip()
                 .lower()
             )
+
+            # If user wants to load more results, click the button and restart the loop
+            # This will allow the script to fetch more trips
             if user_input == "y":
                 load_more_btn.click()
                 time.sleep(1)
                 continue
         else:
+            # If no load more button, prompt for trip inspection
             user_input = (
                 input(
                     "Enter a trip number or range (e.g. 3 or 2-5) to inspect for accessible cabins, or press Enter to exit: "
@@ -185,50 +229,24 @@ def fetch_trips(url: str) -> None:
                 .strip()
                 .lower()
             )
+
+        # If user input is a number or range, inspect the specified trip(s)
         if user_input.isdigit():
             inspect_trip_for_accessible_cabins(int(user_input), trips)
             break
         elif "-" in user_input:
+            # If user input is a range, split it and inspect each trip in the range
             parts = user_input.split("-")
             if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
                 start = int(parts[0])
                 end = int(parts[1])
+
+                # Iterate through the specified range and inspect each trip
                 for idx in range(start, end + 1):
                     inspect_trip_for_accessible_cabins(idx, trips)
                 break
         else:
             break
-
-
-def main() -> None:
-    """Entrypoint for the script."""
-    try:
-        url = input("Enter the Carnival search URL for trips: ").strip()
-        if not url:
-            print("No URL provided. Exiting.")
-            return
-        fetch_trips(url)
-    except KeyboardInterrupt:
-        print("\nInterrupted by user. Exiting...")
-
-
-def is_trip_accessible() -> bool:
-    """
-    Attempt to click the 'Continue to Specials' button on the cabins panel.
-    Returns True if the button was found and clicked, False otherwise.
-    """
-    global driver
-    try:
-        # Wait for the Continue button to be clickable
-        continue_btn = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "button[data-testid='cabinsPanel2021Continue']")
-            )
-        )
-        continue_btn.click()
-        return True
-    except (TimeoutException, WebDriverException):
-        return False
 
 
 def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
@@ -414,6 +432,24 @@ def inspect_trip_for_accessible_cabins(trip_number: int, trips: list):
             print(f"  Error inspecting trip: {e}")
     else:
         print(f"Trip number {trip_number} is out of range.")
+
+def is_trip_accessible() -> bool:
+    """
+    Attempt to click the 'Continue to Specials' button on the cabins panel.
+    Returns True if the button was found and clicked, False otherwise.
+    """
+    global driver
+    try:
+        # Wait for the Continue button to be clickable
+        continue_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "button[data-testid='cabinsPanel2021Continue']")
+            )
+        )
+        continue_btn.click()
+        return True
+    except (TimeoutException, WebDriverException):
+        return False
 
 
 # --- Entrypoint ---
